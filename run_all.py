@@ -18,39 +18,51 @@ SCRIPTS = [
 
 def send_wechat_notification(summary: dict):
     """
-    微信通知占位函数。
-    后续对接个人微信时，在此实现发送消息的逻辑。
-    例如：通过企业微信 Bot / Server酱 / PushPlus / WxPusher 等渠道。
+    通过 PushPlus 推送消息到个人微信。
+    需设置环境变量 PUSHPLUS_TOKEN。
     """
-    msg = (
-        f"📊 债券爬虫日报 {summary['date']}\n"
-        f"────────────────\n"
-        f"执行状态：{'✅ 成功' if summary['success'] else '⚠️ 部分失败'}\n"
-        f"脚本结果：\n"
-    )
+    import requests as req
+
+    token = os.environ.get("PUSHPLUS_TOKEN", "")
+    if not token:
+        print("⚠️ 未设置 PUSHPLUS_TOKEN 环境变量，跳过微信通知", flush=True)
+        return
+
+    # 构建消息内容（纯文本，PushPlus 支持 Markdown）
+    msg_lines = [
+        f"## 📊 债券爬虫日报 {summary['date']}",
+        f"",
+        f"**执行状态：{'✅ 全部成功' if summary['success'] else '⚠️ 部分失败'}**",
+        f"",
+        f"---",
+        f"",
+    ]
     for s in summary["results"]:
         emoji = "✅" if s["success"] else "❌"
-        msg += f"  {emoji} {s['name']}: {s['message']}\n"
-    msg += f"\n详情查看：https://github.com/Tamato-112/shandong-bond-scraper/actions"
+        msg_lines.append(f"{emoji} **{s['name']}**：{s['message']}")
+    msg_lines.append("")
+    msg_lines.append("---")
+    msg_lines.append("[查看 Actions 详情](https://github.com/Tamato-112/shandong-bond-scraper/actions)")
 
-    print(f"\n{'=' * 50}", flush=True)
-    print("【微信通知预览】", flush=True)
-    print(msg, flush=True)
-    print(f"{'=' * 50}", flush=True)
-    print("⚠️ 微信通知尚未正式接入（预留接口）。", flush=True)
+    content = "\n".join(msg_lines)
 
-    # === 后续接入点 ===
-    # 方法一：企业微信群机器人
-    # import requests
-    # requests.post("https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY", json={"msgtype":"text","text":{"content":msg}})
-    #
-    # 方法二：PushPlus（推送至个人微信）
-    # import requests
-    # requests.post("https://www.pushplus.plus/send", json={"token":"YOUR_TOKEN","title":"债券爬虫日报","content":msg})
-    #
-    # 方法三：WxPusher
-    # import requests
-    # requests.post("https://wxpusher.zjiecode.com/api/send/message", json={"appToken":"YOUR_TOKEN","content":msg,"uids":["YOUR_UID"]})
+    payload = {
+        "token": token,
+        "title": f"债券爬虫日报 {summary['date']}",
+        "content": content,
+        "template": "markdown",
+    }
+
+    try:
+        print("📤 正在推送 PushPlus 通知...", flush=True)
+        resp = req.post("https://www.pushplus.plus/send", json=payload, timeout=10)
+        result = resp.json()
+        if result.get("code") == 200:
+            print("✅ PushPlus 通知发送成功", flush=True)
+        else:
+            print(f"⚠️ PushPlus 返回异常: {result}", flush=True)
+    except Exception as e:
+        print(f"❌ PushPlus 发送失败: {e}", flush=True)
 
 
 def run_script(name, script_path):
